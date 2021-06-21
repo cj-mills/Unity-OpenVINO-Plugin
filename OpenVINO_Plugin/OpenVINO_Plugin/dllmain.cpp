@@ -1,5 +1,7 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
+
+
 using namespace InferenceEngine;
 
 #define DLLExport __declspec (dllexport)
@@ -119,7 +121,6 @@ extern "C" {
         texture.data = inputData;
         cv::cvtColor(texture, texture, cv::COLOR_RGBA2RGB);
         
-
         InputsDataMap inputInfo(network.getInputsInfo());
         for (const auto& item : inputInfo) {
             MemoryBlob::Ptr minput = as<MemoryBlob>(infer_request.GetBlob(item.first));
