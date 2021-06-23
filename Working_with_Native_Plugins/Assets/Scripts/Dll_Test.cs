@@ -60,7 +60,7 @@ public class Dll_Test : MonoBehaviour
     private static extern IntPtr UploadModelToDevice(int deviceNum = 0);
 
     [DllImport(dll)]
-    private static extern void PerformInference(IntPtr inputData, int width, int height);
+    private static extern void PerformInference(IntPtr inputData);
 
     // The compiled model used for performing inference
     private Model[] m_RuntimeModels;
@@ -426,7 +426,7 @@ public class Dll_Test : MonoBehaviour
         //Pin Memory
         fixed (Color32* p = outArray)
         {
-            PerformInference((IntPtr)p, width, height);
+            PerformInference((IntPtr)p);
         }
     }
 
