@@ -1,0 +1,2 @@
+F:\Projects\Unity_Projects\Working_with_Native_Plugins\obj\Debug\Assembly-CSharp.csproj.AssemblyReference.cache
+F:\Projects\Unity_Projects\Working_with_Native_Plugins\obj\Debug\Assembly-CSharp.csproj.CoreCompileInputs.cache
