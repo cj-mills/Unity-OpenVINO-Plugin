@@ -3,8 +3,10 @@
 
 using namespace InferenceEngine;
 
+// Create a macro to quickly mark a function for export
 #define DLLExport __declspec (dllexport)
 
+// Wrap code to prevent name-mangling issues
 extern "C" {
 
     // The name of the current compute device
@@ -13,6 +15,8 @@ extern "C" {
     std::vector<std::string> availableDevices;
     // An unparsed list of available compute devices
     std::string allDevices = "";
+    //
+    std::string firstInputName;
     // The name of the output layer of Neural Network "140"
     std::string firstOutputName;
 
@@ -45,8 +49,13 @@ extern "C" {
         }
     }
 
-    // Get the name of the output layer and set the output precision
-    DLLExport void PrepareOutputBlobs() {
+    // Get the names of the input and output layers and set the precision
+    DLLExport void PrepareBlobs() {
+        // Get information about the network input
+        InputsDataMap inputInfo(network.getInputsInfo());
+        firstInputName = inputInfo.begin()->first;
+        inputInfo.begin()->second->setPrecision(Precision::FP32);
+
         // Get information about the network output
         OutputsDataMap outputInfo(network.getOutputsInfo());
         // Get the name of the output layer
@@ -63,7 +72,7 @@ extern "C" {
         // Set batch size to one image
         network.setBatchSize(1);
         // Get the output name and set the output precision
-        PrepareOutputBlobs();
+        PrepareBlobs();
         // Get a list of the available compute devices
         availableDevices = ie.GetAvailableDevices();
         // Reverse the order of the list
@@ -114,20 +123,12 @@ extern "C" {
         // Return the name of the current compute device
         return &currentDevice;
     }
-       
-    // Perform inference with the provided texture data
-    DLLExport void PerformInference(uchar* inputData, int width, int height) {
 
-        // Assign the inputData to the OpenCV Mat
-        texture.data = inputData;
-        // Remove the alpha channel
-        cv::cvtColor(texture, texture, cv::COLOR_RGBA2RGB);
+    // Prepare input values for the model
+    void PrepareInput() {
         
-        // Get information about the network input
-        InputsDataMap inputInfo(network.getInputsInfo());
-
         // Get a poiner to the input tensor for the model
-        MemoryBlob::Ptr minput = as<MemoryBlob>(infer_request.GetBlob(inputInfo.begin()->first));
+        MemoryBlob::Ptr minput = as<MemoryBlob>(infer_request.GetBlob(firstInputName));
 
         // locked memory holder should be alive all time while access to its buffer happens
         auto ilmHolder = minput->wmap();
@@ -150,15 +151,23 @@ extern "C" {
                 data[ch * nPixels + pixel] = texture.data[pixel * num_channels + ch];
             }
         }
+    }
 
-        // Perform inference
-        infer_request.Infer();
-
+    // Process the raw output from the model
+    void ProcessOutput() {
+        
         MemoryBlob::CPtr moutput = as<MemoryBlob>(infer_request.GetBlob(firstOutputName));
 
         // locked memory holder should be alive all time while access to its buffer happens
         auto lmoHolder = moutput->rmap();
         const auto output_data = lmoHolder.as<const PrecisionTrait<Precision::FP32>::value_type*>();
+
+        // Get the number of color channels 
+        size_t num_channels = moutput->getTensorDesc().getDims()[1];
+        // Get the number of pixels in the input image
+        size_t H = moutput->getTensorDesc().getDims()[2];
+        size_t W = moutput->getTensorDesc().getDims()[3];
+        size_t nPixels = W * H;
 
         // Create a temporary vector for processing the raw model output
         std::vector<float> data_img(nPixels * num_channels);
@@ -186,6 +195,22 @@ extern "C" {
             texture.data[i * num_channels + 1] = data_img[i * num_channels + 1];
             texture.data[i * num_channels + 2] = data_img[i * num_channels + 2];
         }
+    }
+       
+    // Perform inference with the provided texture data
+    DLLExport void PerformInference(uchar* inputData) {
+
+        // Assign the inputData to the OpenCV Mat
+        texture.data = inputData;
+        // Remove the alpha channel
+        cv::cvtColor(texture, texture, cv::COLOR_RGBA2RGB);
+        
+        PrepareInput();
+
+        // Perform inference
+        infer_request.Infer();
+
+        ProcessOutput();
 
         // Add alpha channel
         cv::cvtColor(texture, texture, cv::COLOR_RGB2RGBA);
