@@ -38,7 +38,7 @@ extern "C" {
     }
 
     // Configure the cache directory for GPU compute devices
-    DLLExport void SetDeviceCache() {
+    void SetDeviceCache() {
         std::regex e("(GPU)(.*)");
         // Iterate through the availabel compute devices
         for (auto&& device : availableDevices) {
@@ -88,27 +88,28 @@ extern "C" {
 
     // Manually set the input resolution for the model
     DLLExport void SetInputDims(int width, int height) {
-        
-        // ------------- 1. Collect the map of input names and shapes from IR---------------
-        auto input_shapes = network.getInputShapes();
-        // ---------------------------------------------------------------------------------
 
-         // ------------- 2. Set new input shapes -------------------------------------------
+        // Collect the map of input names and shapes from IR
+        auto input_shapes = network.getInputShapes();
+
+        // Set new input shapes
         std::string input_name;
         InferenceEngine::SizeVector input_shape;
-        std::tie(input_name, input_shape) = *input_shapes.begin(); // let's consider first input only
-        input_shape[0] = 1; // set batch size to the first input dimension
-        input_shape[2] = height; // changes input height to the image one
-        input_shape[3] = width; // changes input width to the image one
+        // create a tuple for accessing the input dimensions
+        std::tie(input_name, input_shape) = *input_shapes.begin();
+        // set batch size to the first input dimension
+        input_shape[0] = 1;
+        // changes input height to the image one
+        input_shape[2] = height;
+        // changes input width to the image one
+        input_shape[3] = width;
         input_shapes[input_name] = input_shape;
-        // ---------------------------------------------------------------------------------
 
-        // ------------- 3. Call reshape ---------------------------------------------------
+        // Call reshape
         // Perform shape inference with the new input dimensions
         network.reshape(input_shapes);
         // Initialize the texture variable with the new dimensions
         texture = cv::Mat(height, width, CV_8UC4);
-        // ---------------------------------------------------------------------------------
     }
 
     // Create an executable network for the target compute device

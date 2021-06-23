@@ -41,7 +41,7 @@ public class Dll_Test : MonoBehaviour
     [Tooltip("Text area to display console output")]
     public Text consoleText;
 
-
+    // Name of the DLL file
     const string dll = "OpenVINO_Plugin";
 
     [DllImport(dll)]
@@ -54,7 +54,7 @@ public class Dll_Test : MonoBehaviour
     private static extern bool SetInputDims(int width, int height);
 
     [DllImport(dll)]
-    private static extern void PrepareOutputBlobs();
+    private static extern void PrepareBlobs();
 
     [DllImport(dll)]
     private static extern IntPtr UploadModelToDevice(int deviceNum = 0);
@@ -72,7 +72,9 @@ public class Dll_Test : MonoBehaviour
     private RenderTexture tempTex;
     // Contains the input texture that will be sent to the OpenVINO inference engine
     private Texture2D inputTex;
-    
+    // Stores the raw pixel data for inputTex
+    private byte[] inputData;
+
     // Input image width
     private int width = 960;
     // Input image height
@@ -83,17 +85,14 @@ public class Dll_Test : MonoBehaviour
     // Current compute device for OpenVINO
     private string currentDevice;
     // Parsed list of compute devices for OpenVINO
-    private List<string> deviceList;
+    private List<string> deviceList = new List<string>();
 
-
-    private List<string> openVINOPaths;
-
-    private List<string> modelPaths;
-
-    private List<string> openvinoModels;
-    private List<string> onnxModels;
-
-    private List<string> models;
+    // File paths for the OpenVINO IR models
+    private List<string> openVINOPaths = new List<string>();
+    // Names of the OpenVINO IR model
+    private List<string> openvinoModels = new List<string>();
+    // Names of the ONNX models
+    private List<string> onnxModels = new List<string>();
 
     // Start is called before the first frame update
     void Start()
@@ -104,8 +103,6 @@ public class Dll_Test : MonoBehaviour
         Debug.Log($"Graphics Device Name: {graphicsDeviceName}");
 
         string[] openVINOFiles = System.IO.Directory.GetFiles("models");
-        openVINOPaths = new List<string>();
-        openvinoModels = new List<string>();
         Debug.Log("Available OpenVINO Models");
         foreach (string file in openVINOFiles)
         {
@@ -120,7 +117,9 @@ public class Dll_Test : MonoBehaviour
 
         // Remove default dropdown options
         modelDropdown.ClearOptions();
+        // Add OpenVINO models to menu
         modelDropdown.AddOptions(openvinoModels);
+        // Select the first option in the dropdown
         modelDropdown.SetValueWithoutNotify(0);
 
         // Remove default dropdown options
@@ -137,57 +136,62 @@ public class Dll_Test : MonoBehaviour
             currentDevice = Marshal.PtrToStringAnsi(UploadModelToDevice());
             Debug.Log($"OpenVINO using: {currentDevice}");
 
+            // Get an unparsed list of available 
             openvinoDevices = Marshal.PtrToStringAnsi(GetAvailableDevices());
-            deviceList = new List<string>();
-
+            
             Debug.Log($"Available Devices:");
+            // Parse list of available compute devices
             foreach (string device in openvinoDevices.Split(','))
             {
+                // Add device name to list
                 deviceList.Add(device);
                 Debug.Log(device);
             }
 
+            // Add OpenVINO compute devices to dropdown
             deviceDropdown.AddOptions(deviceList);
+            // Set the value for the dropdown to the current compute device
             deviceDropdown.SetValueWithoutNotify(deviceList.IndexOf(currentDevice));
         }
         else
         {
+            // Use Barracuda inference engine if not on Intel hardware
             inferenceEngineDropdown.SetValueWithoutNotify(1);
         }
         
-        // Set the initial input resolution
+        // Initialize textures with default input resolution
         tempTex = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32);
-        //inputTex = new Texture2D(width, height, TextureFormat.RGBA32, false);
         inputTex = new Texture2D(width, height, TextureFormat.RGBA32, false);
 
-        onnxModels = new List<string>();
+        // Initialize list of Barracuda models
         m_RuntimeModels = new Model[modelAssets.Length];
+        // Initialize list of Barracuda inference engines
         engines = new IWorker[modelAssets.Length];
-        int index = 0;
-        foreach(NNModel m in modelAssets)
+        for(int i = 0; i < modelAssets.Length; i++)
         {
-            onnxModels.Add(m.name);
-            Debug.Log($"ModelAsset Name: {m.name}");
+            // Add names of available ONNX models to list
+            onnxModels.Add(modelAssets[i].name);
+            Debug.Log($"ModelAsset Name: {modelAssets[i].name}");
             // Compile the model asset into an object oriented representation
-            m_RuntimeModels[index] = ModelLoader.Load(m);
+            m_RuntimeModels[i] = ModelLoader.Load(modelAssets[i]);
             // Create a worker that will execute the model with the selected backend
-            engines[index] = WorkerFactory.CreateWorker(workerType, m_RuntimeModels[index]);
-            index++;
+            engines[i] = WorkerFactory.CreateWorker(workerType, m_RuntimeModels[i]);
         }
     }
 
+    // Called when the MonoBehaviour will be destroyed
     private void OnDestroy()
     {
         Destroy(inputTex);
         Destroy(tempTex);
         RenderTexture.ReleaseTemporary(tempTex);
 
-        // Release the resources allocated for the inference engine
+        // Release the resources allocated for the inference engines
         foreach (IWorker engine in engines)
         {
             engine.Dispose();
         }
-        //engine.Dispose();
+        
         Application.logMessageReceived -= Log;
     }
 
@@ -282,20 +286,15 @@ public class Dll_Test : MonoBehaviour
         RenderTexture rTex;
 
         // Check if the target display is larger than the height
-        // and make sure the height is at least 8
+        // and make sure the height is at least 4
         if (src.height > height && height >= 4)
         {
-            // Calculate the scale value for reducing the size of the input image
-            float scale = src.height / height;
-            // Calcualte the new image width
-            int targetWidth = (int)(src.width / scale);
-
             // Adjust the target image dimensions to be multiples of 4
-            height -= (height % 4);
-            targetWidth -= (targetWidth % 4);
+            int targetHeight = height - (height % 4);
+            int targetWidth = width - (width % 4);
 
             // Assign a temporary RenderTexture with the new dimensions
-            rTex = RenderTexture.GetTemporary(targetWidth, height, 24, src.format);
+            rTex = RenderTexture.GetTemporary(targetWidth, targetHeight, 24, src.format);
         }
         else
         {
@@ -317,7 +316,6 @@ public class Dll_Test : MonoBehaviour
         engines[modelDropdown.value].Execute(input);
 
         // Get the raw model output
-        //Tensor prediction = engine.PeekOutput();
         Tensor prediction = engines[modelDropdown.value].PeekOutput();
 
         // Release GPU resources allocated for the Tensor
@@ -340,51 +338,39 @@ public class Dll_Test : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Called when an inference engine option is selected from dropdown
+    /// </summary>
     public void SetInferenceEngine()
     {
-        //inferenceEngineDropdown.
-        Debug.Log("Here");
-        string currentModel;
+        // Get the list of models for the selected inference engine
+        List<string> currentList = inferenceEngineDropdown.value == 0 ? openvinoModels : onnxModels;
+
+        // Remove current dropdown options
         modelDropdown.ClearOptions();
-
-        if (inferenceEngineDropdown.value == 0)
+        // Add current inference engine models to menu
+        modelDropdown.AddOptions(currentList);
+        // Select the first option in the dropdown
+        modelDropdown.SetValueWithoutNotify(0);
+        
+        // Get index for current model selection
+        int index = modelDropdown.value;
+        // Get the name for the previously selected inference engine model
+        string previousModel = inferenceEngineDropdown.value == 0 ? onnxModels[index] : openvinoModels[index];
+        // Check if the model for the previous inference engine is available for the current engine
+        if (currentList.Contains(previousModel))
         {
-            currentModel = onnxModels[modelDropdown.value];
-            // Remove default dropdown options
-            //modelDropdown.ClearOptions();
-            modelDropdown.AddOptions(openvinoModels);
-            modelDropdown.SetValueWithoutNotify(0);
-
-            if (openvinoModels.Contains(currentModel))
-            {
-                modelDropdown.SetValueWithoutNotify(openvinoModels.IndexOf(currentModel));
-            }
-        }
-        else
-        {
-            currentModel = openvinoModels[modelDropdown.value];
-            //Debug.Log("Here");
-
-            // Remove default dropdown options
-            //modelDropdown.ClearOptions();
-            foreach (string model in onnxModels)
-            {
-                Debug.Log(model);
-            }
-            modelDropdown.AddOptions(onnxModels);
-            modelDropdown.SetValueWithoutNotify(0);
-
-            if (onnxModels.Contains(currentModel))
-            {
-                modelDropdown.SetValueWithoutNotify(onnxModels.IndexOf(currentModel));
-            }
+            modelDropdown.SetValueWithoutNotify(openvinoModels.IndexOf(previousModel));
         }
     }
 
-
+    /// <summary>
+    /// Called when a model option is selected from the dropdown
+    /// </summary>
     public void UpdateModel()
     {
-        Debug.Log(modelDropdown.value);
+        Debug.Log($"Selecte Model: {modelDropdown.value}");
+        // Initialize the selected OpenVINO model
         if (inferenceEngineDropdown.value == 0)
         {
             InitializeOpenVINO(openVINOPaths[modelDropdown.value]);
@@ -392,7 +378,9 @@ public class Dll_Test : MonoBehaviour
         }
     }
 
-
+    /// <summary>
+    /// Called when the input resolution is updated
+    /// </summary>
     public void UpdateInputDims()
     {
         // Get the integer value from the width input
@@ -412,25 +400,36 @@ public class Dll_Test : MonoBehaviour
         SetDevice();
 
         // Preparing Output Blobs
-        PrepareOutputBlobs();
+        PrepareBlobs();
     }
 
+    /// <summary>
+    /// Called when a compute device is selected from dropdown
+    /// </summary>
     public void SetDevice()
     {
         // Uploading model to device
         currentDevice = Marshal.PtrToStringAnsi(UploadModelToDevice(deviceDropdown.value));
     }
 
-    public unsafe void UpdateTexture(Color32[] outArray, int width, int height)
+    /// <summary>
+    /// Pin memory for the input data and send it to OpenVINO for inference
+    /// </summary>
+    /// <param name="inputData"></param>
+    public unsafe void UpdateTexture(byte[] inputData)
     {
         //Pin Memory
-        fixed (Color32* p = outArray)
+        fixed (byte* p = inputData)
         {
+            // Perform inference with OpenVINO
             PerformInference((IntPtr)p);
         }
     }
 
-            
+    /// <summary>
+    /// Called once AsyncGPUReadback has been completed
+    /// </summary>
+    /// <param name="request"></param>
     void OnCompleteReadback(AsyncGPUReadbackRequest request)
     {
         if (request.hasError)
@@ -439,7 +438,9 @@ public class Dll_Test : MonoBehaviour
             return;
         }
 
+        // Fill Texture2D with raw data from the AsyncGPUReadbackRequest
         inputTex.LoadRawTextureData(request.GetData<uint>());
+        // Apply changes to Textur2D
         inputTex.Apply();
     }
 
@@ -451,11 +452,15 @@ public class Dll_Test : MonoBehaviour
     /// <param name="dest">The texture for the targer display</param>
     void OnRenderImage(RenderTexture src, RenderTexture dest)
     {
+        // Only stylize current framne if Stylize toggle is on
         if (stylize.isOn)
         {
+            // Check which inference engine to use
             if (inferenceEngineDropdown.value == 0)
             {
+                // Copy current frame to smaller temporary texture
                 Graphics.Blit(src, tempTex);
+                // Flip image before sending to DLL
                 FlipImage(tempTex, "FlipXAxis");
 
                 if (useAsync.isOn)
@@ -469,14 +474,19 @@ public class Dll_Test : MonoBehaviour
                     inputTex.Apply();
                 }
 
-                Color32[] inputPixel32 = inputTex.GetPixels32();
-                UpdateTexture(inputPixel32, inputTex.width, inputTex.height);
-                inputTex.SetPixels32(inputPixel32);
+                // Get raw data from Texture2D
+                inputData = inputTex.GetRawTextureData();
+                // Send reference to inputData to DLL
+                UpdateTexture(inputData);
+                // Load the new image data from the DLL to the texture
+                inputTex.LoadRawTextureData(inputData);
+                // Apply the changes to the texture
                 inputTex.Apply();
-
+                // Copy output image to temporary texture
                 Graphics.Blit(inputTex, tempTex);
-
+                // Flip output image from DLL
                 FlipImage(tempTex, "FlipXAxis");
+                // Copy the temporary texture to the source resolution texture
                 Graphics.Blit(tempTex, src);
             }
             else
@@ -484,23 +494,34 @@ public class Dll_Test : MonoBehaviour
                 StylizeImage(src);
             }
         }
-
+        
         Graphics.Blit(src, dest);
     }
 
 
+    // Called when the object becomes enabled and active
     void OnEnable()
     {
         Application.logMessageReceived += Log;
     }
 
+    /// <summary>
+    /// Updates onscreen console text
+    /// </summary>
+    /// <param name="logString"></param>
+    /// <param name="stackTrace"></param>
+    /// <param name="type"></param>
     public void Log(string logString, string stackTrace, LogType type)
     {
         consoleText.text = consoleText.text + "\n " + logString;
     }
 
+    /// <summary>
+    /// Called when the Quit button is clicked.
+    /// </summary>
     public void Quit()
     {
+        // Causes the application to exit
         Application.Quit();
     }
 }
