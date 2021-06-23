@@ -9,22 +9,20 @@ extern "C" {
 
     // The name of the current compute device
     std::string currentDevice = "";
+    // List of available compute devices
+    std::vector<std::string> availableDevices;
     // An unparsed list of available compute devices
     std::string allDevices = "";
+    // The name of the output layer of Neural Network "140"
+    std::string firstOutputName;
 
     // Stores the pixel data for model input image and output image
     cv::Mat texture;
 
     // Inference engine instance
     Core ie;
-    // List of available compute devices
-    std::vector<std::string> availableDevices;
     // Contains all the information about the Neural Network topology and related constant values for the model
     CNNNetwork network;
-
-    // The name of the output layer of Neural Network "140"
-    std::string firstOutputName;
-
     // Provides an interface for an executable network on the compute device
     ExecutableNetwork executable_network;
     // Provides an interface for an asynchronous inference request
