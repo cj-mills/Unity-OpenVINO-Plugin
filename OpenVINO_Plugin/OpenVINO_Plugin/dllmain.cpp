@@ -82,7 +82,7 @@ extern "C" {
 
     // Set up OpenVINO inference engine
     DLLExport void InitializeOpenVINO(char* modelPath) {
-        
+
         // Read network file
         network = ie.ReadNetwork(modelPath);
         // Set batch size to one image
@@ -130,7 +130,7 @@ extern "C" {
         executable_network = ie.LoadNetwork(network, availableDevices[deviceNum]);
         // Create an inference request object
         infer_request = executable_network.CreateInferRequest();
-        
+
         // Get a poiner to the input tensor for the model
         minput = as<MemoryBlob>(infer_request.GetBlob(firstInputName));
         // Get a poiner to the ouptut tensor for the model
@@ -145,11 +145,11 @@ extern "C" {
 
         // Filling input tensor with image data
         data_img = std::vector<float>(nPixels * num_channels);
-        
+
         // Return the name of the current compute device
         return &availableDevices[deviceNum];;
     }
-       
+
     // Perform inference with the provided texture data
     DLLExport void PerformInference(uchar* inputData) {
 
@@ -157,7 +157,7 @@ extern "C" {
         texture.data = inputData;
         // Remove the alpha channel
         cv::cvtColor(texture, texture, cv::COLOR_RGBA2RGB);
-        
+
         // locked memory holder should be alive all time while access to its buffer happens
         LockedMemory<void> ilmHolder = minput->wmap();
 
