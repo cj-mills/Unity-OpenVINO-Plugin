@@ -4,7 +4,7 @@
 
 ## Tutorial Links
 
-### Intel Developer Zone
+### Intel Developer Zone - Not Publised Yet
 
 [Part 1](): This post covers the prerequisite software that need to be installed and how to convert a pretrained model from ONNX format to the OpenVINO Intermediate Representation format.
 
