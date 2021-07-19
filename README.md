@@ -2,6 +2,10 @@
  
 ![openvino-plugin-demo](openvino-plugin-demo.gif)
 
+
+## Demo Video
+* [OpenVINO Plugin for Unity Demo](https://youtu.be/uSmczpnPam8)
+
 ## Tutorial Links
 
 ### Intel Developer Zone
