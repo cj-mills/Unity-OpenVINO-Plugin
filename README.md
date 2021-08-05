@@ -14,7 +14,7 @@
 
 [Part 2](https://software.intel.com/content/www/us/en/develop/articles/openvino-plugin-for-unity-tutorial-part-2.html): This post walks through the steps needed to create a Dynamic link library (DLL) in Visual Studio to perform inference with the pretrained deep learning model.
 
-[Part 3 - Not Published](): This post demonstrates how to access the DLL as a plugin inside a Unity project.
+[Part 3](https://software.intel.com/content/www/us/en/develop/articles/openvino-inferencing-plugin-unity-tutorial-part-3.html): This post demonstrates how to access the DLL as a plugin inside a Unity project.
 
 ### Personal Blog
 [Part 1](https://christianjmills.com/OpenVINO-Plugin-for-Unity-Tutorial-1/): This post covers the prerequisite software that needs to be installed and how to convert a pretrained model from ONNX format to the OpenVINO Intermediate Representation format.
