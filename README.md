@@ -4,7 +4,7 @@
 
 
 
-This is an updated version of my initial project that enables in the plugin to be used in the Unity Editor and removes the need to manually move files when building the project.
+This is an updated version of my initial project that enables the plugin to be used in the Unity Editor and removes the need to manually move files when building the project.
 
 
 
