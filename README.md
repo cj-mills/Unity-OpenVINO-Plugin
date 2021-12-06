@@ -4,7 +4,7 @@
 
 
 
-## Update 12/6/2021
+## Update - 12/6/2021
 
 Added a new branch that contains an updated version of my initial project that enables the plugin to be used in the Unity Editor and removes the need to manually move files when building the project.
 
