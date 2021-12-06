@@ -9,9 +9,11 @@
 
 // add headers that you want to pre-compile here
 #include "framework.h"
-//#include <memory>
-#include <regex>
+// A header file that provides a set minimal required Inference Engine API.
 #include <inference_engine.hpp>
+// A header file that provides the API for the OpenCV modules.
 #include <opencv2/opencv.hpp>
+// Regular expressions standard header
+#include <regex>
 
 #endif //PCH_H

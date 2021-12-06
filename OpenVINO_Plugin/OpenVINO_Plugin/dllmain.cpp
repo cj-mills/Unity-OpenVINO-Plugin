@@ -9,195 +9,185 @@ using namespace InferenceEngine;
 // Wrap code to prevent name-mangling issues
 extern "C" {
 
-    // List of available compute devices
-    std::vector<std::string> availableDevices;
-    // An unparsed list of available compute devices
-    std::string allDevices = "";
-    // The name of the input layer of Neural Network "input.1"
-    std::string firstInputName;
-    // The name of the output layer of Neural Network "140"
-    std::string firstOutputName;
+	// The width of the source input image
+	int img_w;
+	// The height of the source input image
+	int img_h;
+	// The input width for the model
+	int input_w = 960;
+	// The input height for the model
+	int input_h = 540;
 
-    // Stores the pixel data for model input image and output image
-    cv::Mat texture;
+	// List of available compute devices
+	std::vector<std::string> available_devices;
 
-    // Inference engine instance
-    Core ie;
-    // Contains all the information about the Neural Network topology and related constant values for the model
-    CNNNetwork network;
-    // Provides an interface for an executable network on the compute device
-    ExecutableNetwork executable_network;
-    // Provides an interface for an asynchronous inference request
-    InferRequest infer_request;
+	// Inference engine instance
+	Core ie;
+	// Contains all the information about the Neural Network topology and related constant values for the model
+	CNNNetwork network;
+	// Provides an interface for an executable network on the compute device
+	ExecutableNetwork executable_network;
+	// Provides an interface for an asynchronous inference request
+	InferRequest infer_request;
 
-    // A poiner to the input tensor for the model
-    MemoryBlob::Ptr minput;
-    // A poiner to the output tensor for the model
-    MemoryBlob::CPtr moutput;
+	// A poiner to the input tensor for the model
+	MemoryBlob::Ptr minput;
+	// A poiner to the output tensor for the model
+	MemoryBlob::CPtr moutput;
 
-    // The number of color channels 
-    size_t num_channels;
-    // The number of pixels in the input image
-    size_t nPixels;
 
-    // A vector for processing the raw model output
-    std::vector<float> data_img;
+	// Returns an unparsed list of available compute devices
+	DLLExport int FindAvailableDevices(std::string* device_list) {
 
-    // Returns an unparsed list of available compute devices
-    DLLExport const std::string* GetAvailableDevices() {
-        // Add all available compute devices to a single string
-        for (auto&& device : availableDevices) {
-            allDevices += device;
-            allDevices += ((device == availableDevices[availableDevices.size() - 1]) ? "" : ",");
-        }
-        return &allDevices;
-    }
+		// Get a list of the available compute devices
+		//available_devices = ie.GetAvailableDevices();
 
-    // Configure the cache directory for GPU compute devices
-    void SetDeviceCache() {
-        std::regex e("(GPU)(.*)");
-        // Iterate through the available compute devices
-        for (auto&& device : availableDevices) {
-            // Only configure the cache directory for GPUs
-            if (std::regex_match(device, e)) {
-                ie.SetConfig({ {CONFIG_KEY(CACHE_DIR), "cache"} }, device);
-            }
-        }
-    }
+		available_devices.clear();
 
-    // Get the names of the input and output layers and set the precision
-    DLLExport void PrepareBlobs() {
-        // Get information about the network input
-        InputsDataMap inputInfo(network.getInputsInfo());
-        firstInputName = inputInfo.begin()->first;
-        inputInfo.begin()->second->setPrecision(Precision::U8);
+		for (auto&& device : ie.GetAvailableDevices()) {
+			if (device.find("GNA") != std::string::npos) continue;
 
-        // Get information about the network output
-        OutputsDataMap outputInfo(network.getOutputsInfo());
-        // Get the name of the output layer
-        firstOutputName = outputInfo.begin()->first;
-        // Set the output precision
-        outputInfo.begin()->second->setPrecision(Precision::FP32);
-    }
+			available_devices.push_back(device);
+		}
 
-    // Set up OpenVINO inference engine
-    DLLExport void InitializeOpenVINO(char* modelPath) {
+		// Reverse the order of the list
+		std::reverse(available_devices.begin(), available_devices.end());
 
-        // Read network file
-        network = ie.ReadNetwork(modelPath);
-        // Set batch size to one image
-        network.setBatchSize(1);
-        // Get the output name and set the output precision
-        PrepareBlobs();
-        // Get a list of the available compute devices
-        availableDevices = ie.GetAvailableDevices();
-        // Reverse the order of the list
-        std::reverse(availableDevices.begin(), availableDevices.end());
-        // Specify the cache directory for GPU inference
-        SetDeviceCache();
-    }
+		// Configure the cache directory for GPU compute devices
+		ie.SetConfig({ {CONFIG_KEY(CACHE_DIR), "cache"} }, "GPU");
 
-    // Manually set the input resolution for the model
-    DLLExport void SetInputDims(int width, int height) {
+		return available_devices.size();
+	}
 
-        // Collect the map of input names and shapes from IR
-        auto input_shapes = network.getInputShapes();
+	DLLExport std::string* GetDeviceName(int index) {
+		return &available_devices[index];
+	}
 
-        // Set new input shapes
-        std::string input_name;
-        InferenceEngine::SizeVector input_shape;
-        // create a tuple for accessing the input dimensions
-        std::tie(input_name, input_shape) = *input_shapes.begin();
-        // set batch size to the first input dimension
-        input_shape[0] = 1;
-        // changes input height to the image one
-        input_shape[2] = height;
-        // changes input width to the image one
-        input_shape[3] = width;
-        input_shapes[input_name] = input_shape;
+	// Manually set the input resolution for the model
+	void SetInputDims(int width, int height) {
 
-        // Call reshape
-        // Perform shape inference with the new input dimensions
-        network.reshape(input_shapes);
-        // Initialize the texture variable with the new dimensions
-        texture = cv::Mat(height, width, CV_8UC4);
-    }
+		img_w = width;
+		img_h = height;
 
-    // Create an executable network for the target compute device
-    DLLExport std::string* UploadModelToDevice(int deviceNum) {
+		input_w = (int)(8 * std::roundf(img_w / 8));
+		input_h = (int)(8 * std::roundf(img_h / 8));
 
-        // Create executable network
-        executable_network = ie.LoadNetwork(network, availableDevices[deviceNum]);
-        // Create an inference request object
-        infer_request = executable_network.CreateInferRequest();
+		// Collect the map of input names and shapes from IR
+		auto input_shapes = network.getInputShapes();
 
-        // Get a poiner to the input tensor for the model
-        minput = as<MemoryBlob>(infer_request.GetBlob(firstInputName));
-        // Get a poiner to the ouptut tensor for the model
-        moutput = as<MemoryBlob>(infer_request.GetBlob(firstOutputName));
+		// Set new input shapes
+		std::string input_name_1;
+		InferenceEngine::SizeVector input_shape;
+		// Create a tuple for accessing the input dimensions
+		std::tie(input_name_1, input_shape) = *input_shapes.begin();
+		// Set batch size to the first input dimension
+		input_shape[0] = 1;
+		// Update the height for the input dimensions
+		input_shape[2] = input_h;
+		// Update the width for the input dimensions
+		input_shape[3] = input_w;
+		input_shapes[input_name_1] = input_shape;
 
-        // Get the number of color channels 
-        num_channels = minput->getTensorDesc().getDims()[1];
-        // Get the number of pixels in the input image
-        size_t H = minput->getTensorDesc().getDims()[2];
-        size_t W = minput->getTensorDesc().getDims()[3];
-        nPixels = W * H;
+		// Perform shape inference with the new input dimensions
+		network.reshape(input_shapes);
+	}
 
-        // Filling input tensor with image data
-        data_img = std::vector<float>(nPixels * num_channels);
+	// Create an executable network for the target compute device
+	std::string* UploadModelToDevice(int deviceNum) {
 
-        // Return the name of the current compute device
-        return &availableDevices[deviceNum];;
-    }
+		// Create executable network
+		executable_network = ie.LoadNetwork(network, available_devices[deviceNum]);
+		// Create an inference request object
+		infer_request = executable_network.CreateInferRequest();
 
-    // Perform inference with the provided texture data
-    DLLExport void PerformInference(uchar* inputData) {
+		// Get the name of the input layer
+		std::string input_name = network.getInputsInfo().begin()->first;
+		// Get a poiner to the input tensor for the model
+		minput = as<MemoryBlob>(infer_request.GetBlob(input_name));
 
-        // Assign the inputData to the OpenCV Mat
-        texture.data = inputData;
-        // Remove the alpha channel
-        cv::cvtColor(texture, texture, cv::COLOR_RGBA2RGB);
+		// Get the name of the output layer
+		std::string output_name = network.getOutputsInfo().begin()->first;
+		// Get a poiner to the ouptut tensor for the model
+		moutput = as<MemoryBlob>(infer_request.GetBlob(output_name));
 
-        // locked memory holder should be alive all time while access to its buffer happens
-        LockedMemory<void> ilmHolder = minput->wmap();
+		// Return the name of the current compute device
+		return &available_devices[deviceNum];;
+	}
 
-        // Filling input tensor with image data
-        auto input_data = ilmHolder.as<PrecisionTrait<Precision::U8>::value_type*>();
+	// Set up OpenVINO inference engine
+	DLLExport std::string* InitOpenVINO(char* modelPath, int width, int height, int deviceNum) {
 
-        // Iterate over each pixel in image
-        for (size_t p = 0; p < nPixels; p++) {
-            // Iterate over each color channel for each pixel in image
-            for (size_t ch = 0; ch < num_channels; ++ch) {
-                input_data[ch * nPixels + p] = texture.data[p * num_channels + ch];
-            }
-        }
+		//// Read network file
+		network = ie.ReadNetwork(modelPath);
 
-        // Perform inference
-        infer_request.Infer();
+		SetInputDims(width, height);
 
-        // locked memory holder should be alive all time while access to its buffer happens
-        LockedMemory<const void> lmoHolder = moutput->rmap();
-        const auto output_data = lmoHolder.as<const PrecisionTrait<Precision::FP32>::value_type*>();
+		return UploadModelToDevice(deviceNum);
+	}
 
-        // Iterate through each pixel in the model output
-        for (size_t p = 0; p < nPixels; p++) {
-            // Iterate through each color channel for each pixel in image
-            for (size_t ch = 0; ch < num_channels; ++ch) {
-                // Get values from the model output
-                data_img[p * num_channels + ch] = static_cast<float>(output_data[ch * nPixels + p]);
 
-                // Clamp color values to the range [0, 255]
-                if (data_img[p * num_channels + ch] < 0) data_img[p * num_channels + ch] = 0;
-                if (data_img[p * num_channels + ch] > 255) data_img[p * num_channels + ch] = 255;
+	// Perform inference with the provided texture data
+	DLLExport void PerformInference(uchar* inputData) {
 
-                // Copy the processed output to the OpenCV Mat
-                texture.data[p * num_channels + ch] = data_img[p * num_channels + ch];
-            }
-        }
+		// Store the pixel data for the source input image
+		cv::Mat texture = cv::Mat(img_h, img_w, CV_8UC4);
 
-        // Add alpha channel
-        cv::cvtColor(texture, texture, cv::COLOR_RGB2RGBA);
-        // Copy values form the OpenCV Mat back to inputData
-        std::memcpy(inputData, texture.data, texture.total() * texture.channels());
-    }
+		// Assign the inputData to the OpenCV Mat
+		texture.data = inputData;
+		// Remove the alpha channel
+		cv::cvtColor(texture, texture, cv::COLOR_RGBA2RGB);
+
+		// The number of color channels 
+		int num_channels = texture.channels();
+		// Get the number of pixels in the input image
+		int H = minput->getTensorDesc().getDims()[2];
+		int W = minput->getTensorDesc().getDims()[3];
+		int nPixels = W * H;
+
+		// locked memory holder should be alive all time while access to its buffer happens
+		LockedMemory<void> ilmHolder = minput->wmap();
+
+		// Filling input tensor with image data
+		float* input_data = ilmHolder.as<float*>();
+
+		// Iterate over each pixel in image
+		for (int p = 0; p < nPixels; p++) {
+			// Iterate over each color channel for each pixel in image
+			for (int ch = 0; ch < num_channels; ++ch) {
+				input_data[ch * nPixels + p] = texture.data[p * num_channels + ch];
+			}
+		}
+
+		// Perform inference
+		infer_request.Infer();
+
+		// locked memory holder should be alive all time while access to its buffer happens
+		LockedMemory<const void> moutputHolder = moutput->rmap();
+		const float* net_pred = moutputHolder.as<const PrecisionTrait<Precision::FP32>::value_type*>();
+
+		// Iterate through each pixel in the model output
+		for (size_t p = 0; p < nPixels; p++) {
+			// Iterate through each color channel for each pixel in image
+			for (size_t ch = 0; ch < num_channels; ++ch) {
+				// Get values from the model output
+				float pixel_val = static_cast<float>(net_pred[ch * nPixels + p]);
+
+				// Clamp color values to the range [0, 255]
+				pixel_val = std::max(pixel_val, (float)0);
+				pixel_val = std::min(pixel_val, (float)255);
+
+				// Copy the processed output to the OpenCV Mat
+				texture.data[p * num_channels + ch] = pixel_val;
+			}
+		}
+
+		// Add alpha channel
+		cv::cvtColor(texture, texture, cv::COLOR_RGB2RGBA);
+		// Copy values form the OpenCV Mat back to inputData
+		std::memcpy(inputData, texture.data, texture.total() * texture.channels());
+	}
+
+	DLLExport void FreeResources() {
+		available_devices.clear();
+	}
 }
