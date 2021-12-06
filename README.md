@@ -12,6 +12,8 @@ Added a new branch that contains an updated version of my initial project that e
 
 
 
+**Note:** Only GPU inference is enabled when using the Barracuda engine, due to performance constraints.
+
 ## Demo Video
 
 * [OpenVINO Plugin for Unity Demo](https://youtu.be/uSmczpnPam8)
