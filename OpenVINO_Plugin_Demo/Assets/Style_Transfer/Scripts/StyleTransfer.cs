@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using UnityEngine.UI;
 using Unity.Barracuda;
 using UnityEngine.Rendering;
+using System.IO;
 
 public class StyleTransfer : MonoBehaviour
 {
@@ -32,9 +33,6 @@ public class StyleTransfer : MonoBehaviour
     [Tooltip("Text box for the input height")]
     public TMPro.TMP_InputField heightText;
 
-    [Tooltip("Text area to display console output")]
-    public Text consoleText;
-
     [Tooltip("The model asset file that will be used when performing inference")]
     public NNModel[] modelAssets;
 
@@ -46,22 +44,20 @@ public class StyleTransfer : MonoBehaviour
     const string dll = "OpenVINO_Plugin";
 
     [DllImport(dll)]
-    private static extern IntPtr GetAvailableDevices();
+    private static extern int FindAvailableDevices();
 
     [DllImport(dll)]
-    private static extern void InitializeOpenVINO(string modelPath);
+    private static extern IntPtr GetDeviceName(int index);
 
     [DllImport(dll)]
-    private static extern bool SetInputDims(int width, int height);
-
-    [DllImport(dll)]
-    private static extern void PrepareBlobs();
-
-    [DllImport(dll)]
-    private static extern IntPtr UploadModelToDevice(int deviceNum = 0);
+    private static extern IntPtr InitOpenVINO(string model, int width, int height, int device);
 
     [DllImport(dll)]
     private static extern void PerformInference(IntPtr inputData);
+
+    [DllImport(dll)]
+    private static extern void FreeResources();
+
 
     // The compiled model used for performing inference
     private Model[] m_RuntimeModels;
@@ -95,6 +91,105 @@ public class StyleTransfer : MonoBehaviour
     // Names of the ONNX models
     private List<string> onnxModels = new List<string>();
 
+
+
+    public void Awake()
+    {
+        #if UNITY_EDITOR_WIN
+                return;
+        #else
+
+        Debug.Log("Checking for plugins.xml file");
+
+            string sourcePath = $"{Application.streamingAssetsPath}/plugins.xml";
+            string targetPath = $"{Application.dataPath}/Plugins/x86_64/plugins.xml";
+
+            if (File.Exists(targetPath))
+            {
+                Debug.Log("plugins.xml already in folder");
+            }
+            else
+            {
+                Debug.Log("Moving plugins.xml file from StreamingAssets to Plugins folder.");
+                File.Move(sourcePath, targetPath);
+            }
+
+        #endif
+    }
+
+    /// <summary>
+    /// Initialize the options for the dropdown menus
+    /// </summary>
+    private void InitializeDropdowns()
+    {
+        // Remove default dropdown options
+        deviceDropdown.ClearOptions();
+        // Add OpenVINO compute devices to dropdown
+        deviceDropdown.AddOptions(deviceList);
+        // Set the value for the dropdown to the current compute device
+        deviceDropdown.SetValueWithoutNotify(deviceList.IndexOf(currentDevice));
+
+        // Remove default dropdown options
+        modelDropdown.ClearOptions();
+        // Add OpenVINO models to menu
+        modelDropdown.AddOptions(openvinoModels);
+        // Select the first option in the dropdown
+        modelDropdown.SetValueWithoutNotify(0);
+    }
+
+
+    /// <summary>
+    /// Called when a model option is selected from the dropdown
+    /// </summary>
+    public void InitializeOpenVINO()
+    {
+        // Only initialize OpenVINO when performing inference
+        if (stylize.isOn == false) return;
+
+        Debug.Log("Initializing OpenVINO");
+        Debug.Log($"Selected Model: {openvinoModels[modelDropdown.value]}");
+        Debug.Log($"Selected Model Path: {openVINOPaths[modelDropdown.value]}");
+        Debug.Log($"Setting Input Dims to W: {width} x H: {height}");
+        Debug.Log("Uploading IR Model to Compute Device");
+
+        // Set up the neural network for the OpenVINO inference engine
+        currentDevice = Marshal.PtrToStringAnsi(InitOpenVINO(
+            openVINOPaths[modelDropdown.value],
+            inputTex.width,
+            inputTex.height,
+            deviceDropdown.value));
+
+        Debug.Log($"OpenVINO using: {currentDevice}");
+    }
+
+
+    /// <summary>
+    /// Get the list of available OpenVINO models
+    /// </summary>
+    private void GetOpenVINOModels()
+    {
+        // Get the model files in each subdirectory
+        List<string> openVINOFiles = new List<string>();
+        openVINOFiles.AddRange(System.IO.Directory.GetFiles(Application.streamingAssetsPath + "/models"));
+
+        // Get the paths for the .xml files for each model
+        Debug.Log("Available OpenVINO Models:");
+        foreach (string file in openVINOFiles)
+        {
+            if (file.EndsWith(".xml"))
+            {
+                openVINOPaths.Add(file);
+                string modelName = file.Split('\\')[1];
+                openvinoModels.Add(modelName.Substring(0, modelName.Length));
+
+                Debug.Log($"Model Name: {modelName}");
+                Debug.Log($"File Path: {file}");
+            }
+        }
+        Debug.Log("");
+    }
+
+
     // Start is called before the first frame update
     void Start()
     {
@@ -103,66 +198,38 @@ public class StyleTransfer : MonoBehaviour
         string graphicsDeviceName = SystemInfo.graphicsDeviceName.ToString();
         Debug.Log($"Graphics Device Name: {graphicsDeviceName}");
 
-        string[] openVINOFiles = System.IO.Directory.GetFiles("models");
-        Debug.Log("Available OpenVINO Models");
-        foreach (string file in openVINOFiles)
-        {
-            if (file.EndsWith(".xml"))
-            {
-                Debug.Log(file);
-                openVINOPaths.Add(file);
-                string modelName = file.Split('\\')[1];
-                openvinoModels.Add(modelName.Substring(0, modelName.Length - 4));
-            }
-        }
-
-        // Remove default dropdown options
-        modelDropdown.ClearOptions();
-        // Add OpenVINO models to menu
-        modelDropdown.AddOptions(openvinoModels);
-        // Select the first option in the dropdown
-        modelDropdown.SetValueWithoutNotify(0);
-
-        // Remove default dropdown options
-        deviceDropdown.ClearOptions();
-
         // Check if either the CPU of GPU is made by Intel
         if (processorType.Contains("Intel") || graphicsDeviceName.Contains("Intel"))
         {
-            Debug.Log("Initializing OpenVINO");
-            InitializeOpenVINO(openVINOPaths[0]);
-            Debug.Log($"Setting Input Dims to W: {width} x H: {height}");
-            SetInputDims(width, height);
-            Debug.Log("Uploading IR Model to Compute Device");
-            currentDevice = Marshal.PtrToStringAnsi(UploadModelToDevice());
-            Debug.Log($"OpenVINO using: {currentDevice}");
+            // Get the list of available models
+            GetOpenVINOModels();
 
-            // Get an unparsed list of available 
-            openvinoDevices = Marshal.PtrToStringAnsi(GetAvailableDevices());
-
-            Debug.Log($"Available Devices:");
-            // Parse list of available compute devices
-            foreach (string device in openvinoDevices.Split(','))
+            Debug.Log("Available Devices:");
+            int deviceCount = FindAvailableDevices();
+            for (int i = 0; i < deviceCount; i++)
             {
-                // Add device name to list
-                deviceList.Add(device);
-                Debug.Log(device);
+                deviceList.Add(Marshal.PtrToStringAnsi(GetDeviceName(i)));
+                Debug.Log(deviceList[i]);
             }
-
-            // Add OpenVINO compute devices to dropdown
-            deviceDropdown.AddOptions(deviceList);
-            // Set the value for the dropdown to the current compute device
-            deviceDropdown.SetValueWithoutNotify(deviceList.IndexOf(currentDevice));
         }
         else
         {
-            // Use Barracuda inference engine if not on Intel hardware
-            inferenceEngineDropdown.SetValueWithoutNotify(1);
+            inferenceEngineDropdown.value = 1;
+            Debug.Log("No Intel hardware detected using Barracuda");
         }
 
         // Initialize textures with default input resolution
+        width = (int)(8 * (int)(width / 8));
+        height = (int)(8 * (int)(height / 8));
+        widthText.text = $"{width}";
+        heightText.text = $"{height}";
         tempTex = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32);
         inputTex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+
+        // Initialize the dropdown menus
+        InitializeDropdowns();
+        // Set up the neural network for the OpenVINO inference engine
+        InitializeOpenVINO();
 
         // Initialize list of Barracuda models
         m_RuntimeModels = new Model[modelAssets.Length];
@@ -307,15 +374,6 @@ public class StyleTransfer : MonoBehaviour
     }
 
     /// <summary>
-    /// Called when a compute device is selected from dropdown
-    /// </summary>
-    public void SetDevice()
-    {
-        // Uploading model to device
-        currentDevice = Marshal.PtrToStringAnsi(UploadModelToDevice(deviceDropdown.value));
-    }
-
-    /// <summary>
     /// Called when the input resolution is updated
     /// </summary>
     public void UpdateInputDims()
@@ -325,6 +383,11 @@ public class StyleTransfer : MonoBehaviour
         // Get the integer value from the height input
         int.TryParse(heightText.text, out height);
 
+        width = (int)(8 * (int)(width / 8));
+        height = (int)(8 * (int)(height / 8));
+        widthText.text = $"{width}";
+        heightText.text = $"{height}";
+
         // Update tempTex with the new dimensions
         tempTex = RenderTexture.GetTemporary(width, height, 24, RenderTextureFormat.ARGB32);
         // Update inputTex with the new dimensions
@@ -333,11 +396,10 @@ public class StyleTransfer : MonoBehaviour
 
         // Set input resolution width x height for the OpenVINO model
         Debug.Log($"Setting Input Dims to W: {width} x H: {height}");
-        SetInputDims(width, height);
-        SetDevice();
-
-        // Preparing Output Blobs
-        PrepareBlobs();
+        if (inferenceEngineDropdown.value == 0)
+        {
+            InitializeOpenVINO();
+        }
     }
 
     /// <summary>
@@ -349,7 +411,7 @@ public class StyleTransfer : MonoBehaviour
         // Initialize the selected OpenVINO model
         if (inferenceEngineDropdown.value == 0)
         {
-            InitializeOpenVINO(openVINOPaths[modelDropdown.value]);
+            InitializeOpenVINO();
             UpdateInputDims();
         }
     }
@@ -439,21 +501,9 @@ public class StyleTransfer : MonoBehaviour
         Graphics.Blit(src, dest);
     }
 
-    /// <summary>
-    /// Updates onscreen console text
-    /// </summary>
-    /// <param name="logString"></param>
-    /// <param name="stackTrace"></param>
-    /// <param name="type"></param>
-    public void Log(string logString, string stackTrace, LogType type)
+    private void OnDisable()
     {
-        consoleText.text = consoleText.text + "\n " + logString;
-    }
-
-    // Called when the object becomes enabled and active
-    void OnEnable()
-    {
-        Application.logMessageReceived += Log;
+        FreeResources();
     }
 
     // Called when the MonoBehaviour will be destroyed
@@ -467,8 +517,6 @@ public class StyleTransfer : MonoBehaviour
         {
             engine.Dispose();
         }
-
-        Application.logMessageReceived -= Log;
     }
 
     /// <summary>
