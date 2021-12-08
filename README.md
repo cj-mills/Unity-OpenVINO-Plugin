@@ -34,3 +34,11 @@ Added a new branch that contains an updated version of my initial project that e
 [Part 2](https://christianjmills.com/OpenVINO-Plugin-for-Unity-Tutorial-2/): This post walks through the steps needed to create a Dynamic link library (DLL) in Visual Studio to perform inference with the pretrained deep learning model.
 
 [Part 3](https://christianjmills.com/OpenVINO-Plugin-for-Unity-Tutorial-3/): This post demonstrates how to access the DLL as a plugin inside a Unity project.
+
+
+## Follow Ups
+### OpenVINO StyleTransfer HDRP
+* [GitHub Repository](https://github.com/cj-mills/OpenVINO-StyleTransfer-HDRP)
+
+
+
