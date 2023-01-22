@@ -72,3 +72,4 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 OpenVINO_Plugin_Demo/cache/
 OpenVINO_Plugin_Demo/Library/
+cache/

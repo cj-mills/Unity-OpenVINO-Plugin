@@ -1,0 +1,74 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel ProcessInput
+#pragma kernel ProcessOutput
+#pragma kernel FlipXAxis
+#pragma kernel Mix
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<half4> Result;
+// Stores the input image and is set with cs.SetTexture
+Texture2D<half4> InputImage;
+Texture2D<half4> BaseImage;//added
+
+[numthreads(4, 4, 1)]
+void Mix(uint3 id : SV_DispatchThreadID)
+{
+	//half e = ((InputImage[id.xy].x / 3.0h)* 255.0h) + ((InputImage[id.xy].y / 3.0h)* 255.0h) + ((InputImage[id.xy].z / 3.0h)* 255.0h);
+	//half e = BaseImage[id.xy].w;// ((BaseImage[id.xy].x / 3.0h)) + ((BaseImage[id.xy].y / 3.0h)) + ((BaseImage[id.xy].z / 3.0h));
+	half e = ((BaseImage[id.xy].x / 3.0h)) + ((BaseImage[id.xy].y / 3.0h)) + ((BaseImage[id.xy].z / 3.0h));
+	//half e = 0.5h;// ((BaseImage[id.xy].x / 3.0h)* 255.0h) + ((BaseImage[id.xy].y / 3.0h)* 255.0h) + ((BaseImage[id.xy].z / 3.0h)* 255.0h);
+	Result[id.xy] = half4(
+		// Red channel
+		((InputImage[id.xy].x * e) + (BaseImage[id.xy].x * (1.0h - e))) ,
+		// Green channel
+		((InputImage[id.xy].y * e) + (BaseImage[id.xy].y * (1.0h - e))) ,
+		// Blue channel
+		((InputImage[id.xy].z * e) + (BaseImage[id.xy].z * (1.0h - e))),
+		// Alpha channel
+		1.0h);
+
+}
+[numthreads(4, 4, 1)]
+void ProcessInput(uint3 id : SV_DispatchThreadID)
+{
+    Result[id.xy] = half4((InputImage[id.xy].x * 255.0h),
+        (InputImage[id.xy].y * 255.0h),
+        (InputImage[id.xy].z * 255.0h), 1.0h);
+	/**/
+
+	/*
+	
+	Result[id.xy] = half4(((InputImage[id.xy].x * 255.0h)+ (BaseImage[id.xy].x * 255.0h))/2,
+	((InputImage[id.xy].y * 255.0h) + (InputImage[id.xy].y * 255.0h))/2,
+	((InputImage[id.xy].z * 255.0h) + (InputImage[id.xy].z * 255.0h))/2,
+	1.0h);
+	*/
+}
+
+[numthreads(4, 4, 1)]
+void ProcessOutput(uint3 id : SV_DispatchThreadID)
+{
+    Result[id.xy] = half4((clamp(InputImage[id.xy].x, 0.0h, 255.0h) / 255.0h),
+        (clamp(InputImage[id.xy].y, 0.0f, 255.0h) / 255.0h),
+        (clamp(InputImage[id.xy].z, 0.0f, 255.0h) / 255.0h), 1.0h);
+	//Result[id.xy] = half4(((clamp(InputImage[id.xy].x, 0.0h, 255.0h) / 255.0h)+ (clamp(InputImage[id.xy].x, 0.0h, 255.0h) / 255.0h))/2,
+    //((clamp(InputImage[id.xy].y, 0.0f, 255.0h) / 255.0h)+ (clamp(InputImage[id.xy].y, 0.0f, 255.0h) / 255.0h))/2,
+    //((clamp(InputImage[id.xy].z, 0.0f, 255.0h) / 255.0h)+ (clamp(InputImage[id.xy].z, 0.0f, 255.0h) / 255.0h))/2,
+	//1.0h);
+}
+
+// The height of the input image
+int height;
+// The width of the input image
+int width;
+// Stores the new location for individual pixel values
+int2 coords;
+
+[numthreads(4, 4, 1)]
+void FlipXAxis(uint3 id : SV_DispatchThreadID)
+{
+    // Update the y value for the pixel coordinates
+    coords = int2(id.x, height - id.y);
+    Result[id.xy] = float4(InputImage[coords].x, InputImage[coords].y, InputImage[coords].z, 1.0f);
+}
