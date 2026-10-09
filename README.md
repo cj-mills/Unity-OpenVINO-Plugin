@@ -40,5 +40,12 @@ Added a new branch that contains an updated version of my initial project that e
 ### OpenVINO StyleTransfer HDRP
 * [GitHub Repository](https://github.com/cj-mills/OpenVINO-StyleTransfer-HDRP)
 
+<!-- relocated-posts:start (projected by the relocate verb; never edit by hand) -->
+## Retired posts
 
+The posts that accompanied this repository were retired from [christianjmills.com](https://christianjmills.com) and now live here:
 
+- [OpenVINO Plugin for Unity Tutorial Pt.1](retired-post/openvino-unity-plugin/part-1/README.md) (2021-07-06)
+- [OpenVINO Plugin for Unity Tutorial Pt. 2](retired-post/openvino-unity-plugin/part-2/README.md) (2021-07-06)
+- [OpenVINO Plugin for Unity Tutorial Pt.3](retired-post/openvino-unity-plugin/part-3/README.md) (2021-07-06)
+<!-- relocated-posts:end -->
